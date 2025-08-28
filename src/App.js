@@ -22,9 +22,10 @@ import {
 
 // --- Helper Functions & Constants ---
 
-// IMPORTANT: These are placeholders. In a real environment, these would be provided.
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-splitify-app';
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+// This setup allows the app to work in different environments (like Netlify)
+// by checking if special variables exist on the 'window' object.
+const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-splitify-app';
+const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? JSON.parse(window.__firebase_config) : {
     apiKey: "YOUR_API_KEY",
     authDomain: "YOUR_AUTH_DOMAIN",
     projectId: "YOUR_PROJECT_ID",
@@ -32,7 +33,7 @@ const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__f
     messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
     appId: "YOUR_APP_ID"
 };
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
 
 
 // --- Firebase Initialization ---
@@ -400,7 +401,7 @@ function Dashboard({ user, users, expenses }) {
                 {/* Expenses List */}
                 <div className="bg-white p-4 rounded-xl shadow-sm">
                     <h2 className="font-bold text-gray-800 mb-3">Recent Expenses</h2>
-                    {sortedExpenses.length === <strong> 0 </strong> ? (
+                    {sortedExpenses.length === 0 ? (
                         <p className="text-gray-500 text-center py-4">No expenses added yet. Add one to get started!</p>
                     ) : (
                         <ul className="space-y-3">
