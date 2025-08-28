@@ -21,11 +21,8 @@ import {
 } from 'firebase/firestore';
 
 // --- Helper Functions & Constants ---
-
-// This setup allows the app to work in different environments (like Netlify)
-// by checking if special variables exist on the 'window' object.
-const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-splitify-app';
-const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? JSON.parse(window.__firebase_config) : {
+const appId = typeof (window as any).__app_id !== 'undefined' ? (window as any).__app_id : 'default-splitify-app';
+const firebaseConfig = typeof (window as any).__firebase_config !== 'undefined' ? JSON.parse((window as any).__firebase_config) : {
     apiKey: "YOUR_API_KEY",
     authDomain: "YOUR_AUTH_DOMAIN",
     projectId: "YOUR_PROJECT_ID",
@@ -33,7 +30,7 @@ const firebaseConfig = typeof window.__firebase_config !== 'undefined' ? JSON.pa
     messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
     appId: "YOUR_APP_ID"
 };
-const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
+const initialAuthToken = typeof (window as any).__initial_auth_token !== 'undefined' ? (window as any).__initial_auth_token : null;
 
 
 // --- Firebase Initialization ---
@@ -52,8 +49,25 @@ const CheckCircleIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-green-500"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
 );
 
+// --- Type Definitions for Clarity ---
+interface User {
+    uid: string;
+    displayName: string;
+    email?: string;
+}
+
+interface Expense {
+    id: string;
+    description: string;
+    amount: number;
+    paidBy: string;
+    splitWith: { uid: string; share: number }[];
+    createdAt?: { seconds: number };
+}
+
+
 // --- Authentication Component ---
-function AuthComponent({ setUser }) {
+function AuthComponent({ setUser }: { setUser: React.Dispatch<React.SetStateAction<User | null>> }) {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [displayName, setDisplayName] = useState('');
@@ -61,7 +75,7 @@ function AuthComponent({ setUser }) {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleAuthAction = async (e) => {
+    const handleAuthAction = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         setLoading(true);
@@ -73,7 +87,6 @@ function AuthComponent({ setUser }) {
                     return;
                 }
                 const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                // Create a user document in Firestore
                 await setDoc(doc(db, `artifacts/${appId}/public/data/users`, userCredential.user.uid), {
                     uid: userCredential.user.uid,
                     email: userCredential.user.email,
@@ -82,7 +95,7 @@ function AuthComponent({ setUser }) {
             } else {
                 await signInWithEmailAndPassword(auth, email, password);
             }
-        } catch (err) {
+        } catch (err: any) {
             setError(err.message);
         } finally {
             setLoading(false);
@@ -145,7 +158,7 @@ function AuthComponent({ setUser }) {
 }
 
 // --- Add Expense Modal Component ---
-function AddExpenseModal({ setShowModal, users, currentUser }) {
+function AddExpenseModal({ setShowModal, users, currentUser }: { setShowModal: (show: boolean) => void; users: User[]; currentUser: User }) {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [paidBy, setPaidBy] = useState(currentUser.uid);
@@ -153,13 +166,13 @@ function AddExpenseModal({ setShowModal, users, currentUser }) {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleSplitWithChange = (uid) => {
+    const handleSplitWithChange = (uid: string) => {
         setSplitWith(prev => 
             prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
         );
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         
@@ -181,7 +194,6 @@ function AddExpenseModal({ setShowModal, users, currentUser }) {
                 share: parseFloat(share.toFixed(2))
             }));
             
-            // Adjust for rounding errors on the last person
             const totalCalculated = splitDetails.reduce((sum, s) => sum + s.share, 0);
             const roundingDiff = numericAmount - totalCalculated;
             if (Math.abs(roundingDiff) > 0.001) {
@@ -275,12 +287,11 @@ function AddExpenseModal({ setShowModal, users, currentUser }) {
 }
 
 // --- Dashboard Component ---
-function Dashboard({ user, users, expenses }) {
+function Dashboard({ user, users, expenses }: { user: User; users: User[]; expenses: Expense[] }) {
     const [showModal, setShowModal] = useState(false);
     
     const simplifiedDebts = useMemo(() => {
-        // This function calculates who owes whom.
-        const balances = {};
+        const balances: { [key: string]: number } = {};
         users.forEach(u => balances[u.uid] = 0);
 
         expenses.forEach(expense => {
@@ -290,8 +301,8 @@ function Dashboard({ user, users, expenses }) {
             });
         });
 
-        const debtors = [];
-        const creditors = [];
+        const debtors: { uid: string, amount: number }[] = [];
+        const creditors: { uid: string, amount: number }[] = [];
 
         Object.entries(balances).forEach(([uid, balance]) => {
             if (balance > 0.01) {
@@ -337,7 +348,7 @@ function Dashboard({ user, users, expenses }) {
         return { totalOwedToYou: owedToYou, totalYouOwe: youOwe };
     }, [simplifiedDebts, user.uid]);
 
-    const getUserName = (uid) => users.find(u => u.uid === uid)?.displayName || 'Someone';
+    const getUserName = (uid: string) => users.find(u => u.uid === uid)?.displayName || 'Someone';
     
     const sortedExpenses = useMemo(() => {
         return [...expenses].sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -346,7 +357,6 @@ function Dashboard({ user, users, expenses }) {
 
     return (
         <div className="bg-gray-50 min-h-screen">
-            {/* Header */}
             <header className="bg-white shadow-sm p-4 flex justify-between items-center sticky top-0 z-10">
                 <h1 className="text-xl font-bold text-gray-800">Hi, {user.displayName}</h1>
                 <button onClick={() => signOut(auth)} className="text-sm font-semibold text-blue-600 hover:text-blue-800">
@@ -355,7 +365,6 @@ function Dashboard({ user, users, expenses }) {
             </header>
 
             <main className="p-4 md:p-6">
-                {/* Balance Summary */}
                 <div className="grid grid-cols-2 gap-4 mb-6">
                     <div className="bg-green-100 p-4 rounded-xl">
                         <p className="text-sm text-green-800">You are owed</p>
@@ -367,7 +376,6 @@ function Dashboard({ user, users, expenses }) {
                     </div>
                 </div>
 
-                {/* Simplified Debts Section */}
                 <div className="bg-white p-4 rounded-xl shadow-sm mb-6">
                     <h2 className="font-bold text-gray-800 mb-3">Who Owes Who</h2>
                     {simplifiedDebts.length === 0 ? (
@@ -392,7 +400,6 @@ function Dashboard({ user, users, expenses }) {
                     )}
                 </div>
 
-                {/* Expenses List */}
                 <div className="bg-white p-4 rounded-xl shadow-sm">
                     <h2 className="font-bold text-gray-800 mb-3">Recent Expenses</h2>
                     {sortedExpenses.length === 0 ? (
@@ -432,7 +439,6 @@ function Dashboard({ user, users, expenses }) {
                 </div>
             </main>
 
-            {/* Add Expense Button */}
             <div className="fixed bottom-6 right-6">
                 <button 
                     onClick={() => setShowModal(true)} 
@@ -451,45 +457,35 @@ function Dashboard({ user, users, expenses }) {
 
 // --- Main App Component ---
 export default function App() {
-    const [user, setUser] = useState(null);
+    const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
-    const [users, setUsers] = useState([]);
-    const [expenses, setExpenses] = useState([]);
+    const [users, setUsers] = useState<User[]>([]);
+    const [expenses, setExpenses] = useState<Expense[]>([]);
 
-    // Effect for handling authentication state
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
-                // For non-anonymous users, we expect a document in Firestore.
-                // We listen to that document to get their profile (e.g., displayName).
                 if (!firebaseUser.isAnonymous) {
                     const userDocRef = doc(db, `artifacts/${appId}/public/data/users`, firebaseUser.uid);
                     const unsubscribeDoc = onSnapshot(userDocRef, (docSnap) => {
                         if (docSnap.exists()) {
-                            setUser({ ...firebaseUser, ...docSnap.data() });
+                            setUser({ ...firebaseUser, ...(docSnap.data() as User) });
                         } else {
-                            // User is in Auth, but not in Firestore. This is an inconsistent state
-                            // for a non-anonymous user. Could be a race condition on signup.
-                            // Setting user to the firebaseUser will keep them on the auth screen if they lack a displayName.
-                            setUser(firebaseUser);
+                            setUser(firebaseUser as User);
                         }
                         setLoading(false);
                     }, (error) => {
                         console.error("Error fetching user profile:", error);
-                        signOut(auth); // Sign out on error to prevent being stuck.
+                        signOut(auth);
                         setLoading(false);
                     });
                     return () => unsubscribeDoc();
                 } else {
-                    // It's an anonymous user. They don't have a profile doc.
-                    // Just set the basic user object. They will stay on the AuthComponent page.
-                    setUser(firebaseUser);
+                    setUser(firebaseUser as User);
                     setLoading(false);
                 }
             } else {
-                // No user is logged in.
                 setUser(null);
-                 // Try to sign in with token or anonymously on initial load.
                 try {
                     if (initialAuthToken) {
                         await signInWithCustomToken(auth, initialAuthToken);
@@ -498,7 +494,6 @@ export default function App() {
                     }
                 } catch (error) {
                     console.error("Initial sign-in failed", error);
-                    // If sign-in fails, stop loading so the auth page can be shown.
                     setLoading(false);
                 }
             }
@@ -506,39 +501,30 @@ export default function App() {
         return () => unsubscribe();
     }, []);
 
-    // Effect for fetching all users and expenses when a user is logged in
     useEffect(() => {
-        // We only proceed if we have a user with a displayName. This is our app's
-        // definition of a "fully logged-in" user who is authorized to see data.
         if (!user || !user.displayName) {
             setUsers([]);
             setExpenses([]);
             return;
         }
 
-        // Fetch all users
         const usersQuery = query(collection(db, `artifacts/${appId}/public/data/users`));
         const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
-            const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<User, 'id'>) }));
             setUsers(usersData);
-        }, (error) => {
-            console.error("Permission denied fetching users. Check Firestore rules.", error);
         });
 
-        // Fetch all expenses
         const expensesQuery = query(collection(db, `artifacts/${appId}/public/data/expenses`));
         const unsubscribeExpenses = onSnapshot(expensesQuery, (snapshot) => {
-            const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            const expensesData = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as Omit<Expense, 'id'>) }));
             setExpenses(expensesData);
-        }, (error) => {
-            console.error("Permission denied fetching expenses. Check Firestore rules.", error);
         });
 
         return () => {
             unsubscribeUsers();
             unsubscribeExpenses();
         };
-    }, [user]); // This effect correctly depends on the user object.
+    }, [user]);
 
     if (loading) {
         return (
@@ -548,6 +534,5 @@ export default function App() {
         );
     }
 
-    // Render Auth or Dashboard based on user state
     return user && user.displayName ? <Dashboard user={user} users={users} expenses={expenses} /> : <AuthComponent setUser={setUser} />;
 }
